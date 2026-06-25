@@ -1,0 +1,11 @@
+# build artifacts
+/bin/
+frontend/dist/
+frontend/node_modules/
+
+# go
+backend/gotypemyadmin
+
+# misc
+*.log
+.DS_Store
