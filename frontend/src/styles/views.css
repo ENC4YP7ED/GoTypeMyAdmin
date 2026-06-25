@@ -35,7 +35,11 @@
 .gtma-connect__name { font-size: var(--fs-xl); font-weight: var(--fw-bold); color: var(--text-strong); letter-spacing: -0.01em; }
 .gtma-connect__tag { font-size: var(--fs-sm); }
 .gtma-connect__form { display: flex; flex-direction: column; gap: var(--sp-4); }
+.gtma-connect__row { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.gtma-connect__host { flex: 2 1 180px; min-width: 0; }
+.gtma-connect__port { flex: 1 1 90px; min-width: 0; }
 .gtma-connect__footer { display: flex; gap: var(--sp-2); align-items: center; font-size: var(--fs-xs); }
+.gtma-connect__footer .fa-icon { flex: none; }
 
 /* ---- Shell / Topbar ------------------------------------------------------- */
 .gtma-shell { height: 100%; }
@@ -79,7 +83,7 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 .gtma-breadcrumb__sep { color: var(--gray-400); font-size: 10px; }
 
 /* ---- Body / Sidebar ------------------------------------------------------- */
-.gtma-body { min-height: 0; }
+.gtma-body { display: flex; align-items: stretch; min-height: 0; }
 .gtma-sidebar {
   width: var(--sidebar-w); flex: none;
   border-right: 1px solid var(--border);
@@ -109,8 +113,11 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 .gtma-page, .gtma-home { overflow: auto; }
 .gtma-page__inner, .gtma-home__inner { padding: var(--sp-6) var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-5); }
 .gtma-page__head, .gtma-home__head {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4);
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--sp-4); flex-wrap: wrap;
 }
+.gtma-page__head > *, .gtma-home__head > * { min-width: 0; }
+.gtma-page__title, .gtma-home__title { overflow-wrap: anywhere; }
 .gtma-page__title, .gtma-home__title {
   font-size: var(--fs-2xl); font-weight: var(--fw-bold); color: var(--text-strong);
   letter-spacing: -0.02em; line-height: 1.1;

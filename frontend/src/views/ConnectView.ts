@@ -8,7 +8,7 @@ import { store } from "../state/store.ts";
 /** The connection screen shown when no session is active. */
 export function ConnectView(onConnected: () => void): HTMLElement {
   const host = TextInput({ label: "Host", value: "127.0.0.1", icon: "server", placeholder: "127.0.0.1" });
-  const port = TextInput({ label: "Port", value: "3306", icon: "plug", type: "number" });
+  const port = TextInput({ label: "Port", value: "3306", icon: "plug", inputMode: "numeric", placeholder: "3306" });
   const user = TextInput({ label: "Username", value: "root", icon: "user", autofocus: true });
   const pass = TextInput({ label: "Password", type: "password", icon: "lock", placeholder: "••••••••" });
 
@@ -57,9 +57,9 @@ export function ConnectView(onConnected: () => void): HTMLElement {
       ),
     ),
     el("div.gtma-connect__form",
-      el("div.row.gap-3",
-        el("div", { style: { flex: "2" } }, host.el),
-        el("div", { style: { flex: "1" } }, port.el),
+      el("div.gtma-connect__row",
+        el("div.gtma-connect__host", host.el),
+        el("div.gtma-connect__port", port.el),
       ),
       user.el,
       pass.el,

@@ -55,6 +55,23 @@ button {
   cursor: pointer;
 }
 
+/* Kill native number-input spin buttons — they break the rounded border and
+   make the field render a hair taller than its text siblings. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+/* Strip the default search-field clear/decoration so it matches text fields. */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
 ::selection {
   background: var(--gray-400);
   color: var(--text-strong);

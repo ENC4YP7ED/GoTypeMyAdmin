@@ -64,7 +64,7 @@
 .gtma-btn-spin { animation: gtma-spin 0.7s linear infinite; }
 
 /* ---- TextInput ------------------------------------------------------------ */
-.gtma-input { display: flex; flex-direction: column; gap: 6px; }
+.gtma-input { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .gtma-input__label {
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
@@ -78,6 +78,8 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   padding: 0 10px;
+  min-width: 0;
+  overflow: hidden;
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .gtma-input--md { height: 36px; }
@@ -91,12 +93,16 @@
 .gtma-input__field {
   flex: 1;
   min-width: 0;
+  width: 100%;
   background: none;
   border: none;
   outline: none;
+  appearance: none;
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-md);
+  line-height: normal;
+  height: 100%;
 }
 .gtma-input__field::placeholder { color: var(--text-disabled); }
 .gtma-input__clear, .gtma-input__toggle {

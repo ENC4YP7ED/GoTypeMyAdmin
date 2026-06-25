@@ -154,7 +154,7 @@ export function AppShell(onDisconnect: () => void): HTMLElement {
     content.appendChild(renderRoute(route));
   });
 
-  return el("div.gtma-shell.col.grow", topbar, el("div.gtma-body.row.grow", sidebar, content));
+  return el("div.gtma-shell.col.grow", topbar, el("div.gtma-body.grow", sidebar, content));
 }
 
 function renderRoute(route: Route): HTMLElement {

@@ -4,6 +4,7 @@ export interface TextInputOptions {
   value?: string;
   placeholder?: string;
   type?: "text" | "password" | "number" | "search" | "email";
+  inputMode?: "text" | "numeric" | "decimal" | "tel" | "email" | "url" | "search";
   icon?: string;
   label?: string;
   hint?: string;
@@ -31,6 +32,7 @@ export function TextInput(opts: TextInputOptions): TextInputHandle {
   const input = el("input.gtma-input__field", {
     attrs: {
       type: opts.type ?? "text",
+      inputmode: opts.inputMode ?? null,
       placeholder: opts.placeholder ?? "",
       spellcheck: false,
       autocomplete: opts.type === "password" ? "current-password" : "off",
