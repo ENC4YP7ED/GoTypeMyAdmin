@@ -8,22 +8,51 @@ import (
 	"gotypemyadmin/internal/session"
 )
 
+// maxBodyBytes caps request bodies (large .sql imports still fit comfortably)
+// to prevent a single request from exhausting server memory.
+const maxBodyBytes = 64 << 20 // 64 MiB
+
+// queryRowCap bounds the number of rows an ad-hoc /query result loads into
+// memory, so a `SELECT *` on a huge table can't OOM the backend.
+const queryRowCap = 100_000
+
+// Config tunes API-level security knobs.
+type Config struct {
+	// AllowHosts, when non-empty, restricts which database hosts a client may
+	// connect to (mitigates using the server as an SSRF/port-scan proxy).
+	AllowHosts []string
+}
+
 // API holds shared dependencies for the handlers.
 type API struct {
-	sessions *session.Store
-	mux      *http.ServeMux
+	sessions   *session.Store
+	mux        *http.ServeMux
+	allowHosts map[string]bool
 }
 
 // New builds the API handler with all routes registered.
-func New(sessions *session.Store) *API {
-	a := &API{sessions: sessions, mux: http.NewServeMux()}
+func New(sessions *session.Store, cfg Config) *API {
+	allow := make(map[string]bool, len(cfg.AllowHosts))
+	for _, h := range cfg.AllowHosts {
+		allow[h] = true
+	}
+	a := &API{sessions: sessions, mux: http.NewServeMux(), allowHosts: allow}
 	a.routes()
 	return a
 }
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	a.mux.ServeHTTP(w, r)
+}
+
+// hostAllowed reports whether a client may open a connection to host. An empty
+// allowlist permits any host (documented SSRF trade-off for self-hosting).
+func (a *API) hostAllowed(host string) bool {
+	if len(a.allowHosts) == 0 {
+		return true
+	}
+	return a.allowHosts[host]
 }
 
 func (a *API) routes() {

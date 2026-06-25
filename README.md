@@ -150,6 +150,7 @@ make test-db-stop
 | `-addr` / `GTMA_ADDR`  | `:8088`              | listen address                   |
 | `-static` / `GTMA_STATIC` | `../frontend/dist`| built frontend directory         |
 | `-session-ttl`         | `2h`                 | idle lifetime of a DB session    |
+| `-allow-hosts` / `GTMA_ALLOW_HOSTS` | _(empty = any)_ | comma-separated allowlist of DB hosts clients may connect to |
 
 ## REST API
 
@@ -178,6 +179,35 @@ make test-db-stop
 | `DELETE /api/users/{user}/{host}` | drop a user |
 | `POST /api/query` | run arbitrary SQL `{database, sql}` |
 | `POST /api/import` | run a multi-statement SQL script |
+
+## Security
+
+GoTypeMyAdmin was audited against the recurring phpMyAdmin vulnerability classes
+(the [PMASA](https://www.phpmyadmin.net/security/) advisories) and related CVEs.
+How each class is handled here:
+
+| phpMyAdmin class (examples) | GoTypeMyAdmin |
+| --------------------------- | ------------- |
+| **XSS** from crafted table/db/column names or data — the single largest PMASA category (e.g. PMASA-2025-1, -2025-2, -2023-1) | The DOM layer (`core/dom.ts`) writes text as `textContent` by default; the only two `innerHTML` sinks (SQL highlighters) HTML-escape first. A strict **Content-Security-Policy** (`script-src 'self'`, no `unsafe-inline`) is sent as defense-in-depth. |
+| **SQL injection** (PMASA-2020-x: username/search/user-accounts) | Identifiers go through backtick-quoting (`QuoteIdent`); row reads/writes use bound `?` parameters; `ORDER BY` direction is whitelisted. The `GRANT` builder — which cannot bind parameters — validates privileges against an allowlist and canonicalizes the scope. |
+| **CSRF** (CVE-2019-12616) | Auth is a `Bearer` token in the `Authorization` header (not an ambient cookie), so cross-site requests can't carry it. |
+| **SSRF / arbitrary-server proxy** (PMASA-2017-6; cf. `AllowArbitraryServer`) | The connect host can be restricted with `-allow-hosts`; the server logs a warning when it's unset. |
+| **Resource exhaustion / DoS** | Request bodies capped (64 MiB), ad-hoc query results capped (100k rows, flagged `truncated`), browse paging capped (1000/page). |
+| **Path traversal / LFI** | Static files served via `http.Dir` + cleaned paths; no user-controlled file reads. |
+| **RCE via `preg_replace /e`, file include, deserialization** | Not applicable — no `eval`, no dynamic includes, no PHP. |
+| **Clickjacking / MIME sniffing** | `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
+
+**Operator responsibilities (not handled by the app):**
+
+- **Terminate TLS** in front of it (a reverse proxy). Connection credentials are
+  proxied to the database in the request body — never run it over plain HTTP on
+  an untrusted network.
+- **Set `-allow-hosts`** to the database hosts you actually use, to avoid the
+  server being usable as an internal port-scanner.
+- Consider **rate-limiting `/api/connect`** at the proxy to blunt credential
+  brute-forcing. The session token lives in `localStorage`; the strict CSP +
+  escaping keep it out of reach of injected script, but treat the origin as
+  trusted.
 
 ## Status & roadmap
 

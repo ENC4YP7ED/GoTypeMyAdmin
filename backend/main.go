@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,12 +26,19 @@ func main() {
 	addr := flag.String("addr", envOr("GTMA_ADDR", ":8088"), "listen address")
 	staticDir := flag.String("static", envOr("GTMA_STATIC", "../frontend/dist"), "directory of built frontend assets")
 	sessionTTL := flag.Duration("session-ttl", 2*time.Hour, "idle lifetime of a database session")
+	allowHostsRaw := flag.String("allow-hosts", envOr("GTMA_ALLOW_HOSTS", ""),
+		"comma-separated allowlist of database hosts clients may connect to (empty = any)")
 	flag.Parse()
+
+	allowHosts := splitCSV(*allowHostsRaw)
+	if len(allowHosts) == 0 {
+		log.Printf("warning: -allow-hosts is empty; any client can make this server connect to arbitrary hosts (SSRF). Set GTMA_ALLOW_HOSTS to restrict.")
+	}
 
 	sessions := session.NewStore(*sessionTTL)
 	defer sessions.Close()
 
-	apiHandler := api.New(sessions)
+	apiHandler := api.New(sessions, api.Config{AllowHosts: allowHosts})
 	srv := server.New(server.Config{
 		Addr:      *addr,
 		StaticDir: *staticDir,
@@ -61,4 +69,14 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

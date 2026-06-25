@@ -119,6 +119,7 @@ export function SqlConsole(opts: SqlConsoleOptions = {}): HTMLElement {
         : Badge(`${formatNumber(rs.rowsAffected)} affected`, "success", { icon: "check" }),
       Badge(formatDuration(rs.durationMs), "neutral", { icon: "stopwatch" }),
       rs.lastInsertId ? Badge(`insert id ${rs.lastInsertId}`, "neutral", { icon: "hashtag" }) : null,
+      rs.truncated ? Badge("truncated", "warning", { icon: "scissors" }) : null,
     );
 
     if (rs.isQuery) {

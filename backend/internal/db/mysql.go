@@ -228,18 +228,20 @@ func Indexes(ctx context.Context, db *sql.DB, schema, table string) ([]Index, er
 
 // ResultSet is the generic shape returned for any SELECT-style query.
 type ResultSet struct {
-	Columns      []string   `json:"columns"`
-	ColumnTypes  []string   `json:"columnTypes"`
+	Columns      []string    `json:"columns"`
+	ColumnTypes  []string    `json:"columnTypes"`
 	Rows         [][]*string `json:"rows"`
-	RowsAffected int64      `json:"rowsAffected"`
-	LastInsertID int64      `json:"lastInsertId"`
-	DurationMS   float64    `json:"durationMs"`
-	IsQuery      bool       `json:"isQuery"`
+	RowsAffected int64       `json:"rowsAffected"`
+	LastInsertID int64       `json:"lastInsertId"`
+	DurationMS   float64     `json:"durationMs"`
+	IsQuery      bool        `json:"isQuery"`
+	Truncated    bool        `json:"truncated"`
 }
 
 // Exec runs an arbitrary statement. SELECT/SHOW/etc. return rows; everything
 // else returns affected-row counts. `schema`, when non-empty, is USEd first.
-func Exec(ctx context.Context, db *sql.DB, schema, statement string) (*ResultSet, error) {
+// maxRows > 0 caps how many rows are buffered (0 = unlimited).
+func Exec(ctx context.Context, db *sql.DB, schema, statement string, maxRows int) (*ResultSet, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, err
@@ -262,7 +264,7 @@ func Exec(ctx context.Context, db *sql.DB, schema, statement string) (*ResultSet
 			return nil, err
 		}
 		defer rows.Close()
-		rs, err := scanRows(rows)
+		rs, err := scanRows(rows, maxRows)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +299,7 @@ func Browse(ctx context.Context, db *sql.DB, schema, table string, limit, offset
 	}
 	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
 
-	rs, err := Exec(ctx, db, "", q)
+	rs, err := Exec(ctx, db, "", q, 0)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -316,7 +318,7 @@ func CreateTableSQL(ctx context.Context, db *sql.DB, schema, table string) (stri
 	return ddl, err
 }
 
-func scanRows(rows *sql.Rows) (*ResultSet, error) {
+func scanRows(rows *sql.Rows, maxRows int) (*ResultSet, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -329,6 +331,10 @@ func scanRows(rows *sql.Rows) (*ResultSet, error) {
 
 	rs := &ResultSet{Columns: cols, ColumnTypes: typeNames, Rows: [][]*string{}}
 	for rows.Next() {
+		if maxRows > 0 && len(rs.Rows) >= maxRows {
+			rs.Truncated = true
+			break
+		}
 		raw := make([]sql.RawBytes, len(cols))
 		ptrs := make([]any, len(cols))
 		for i := range raw {

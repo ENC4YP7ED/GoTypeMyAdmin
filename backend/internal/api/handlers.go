@@ -66,6 +66,10 @@ func (a *API) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if req.Port == 0 {
 		req.Port = 3306
 	}
+	if !a.hostAllowed(req.Host) {
+		writeErr(w, http.StatusForbidden, "connections to this host are not permitted")
+		return
+	}
 
 	pool, err := db.Open(r.Context(), req.Host, req.Port, req.User, req.Password)
 	if err != nil {
@@ -137,7 +141,7 @@ func (a *API) handleCreateDatabase(w http.ResponseWriter, r *http.Request) {
 	if req.Collation != "" {
 		stmt += " COLLATE " + db.QuoteIdent(req.Collation)
 	}
-	if _, err := db.Exec(r.Context(), sess(r).DB, "", stmt); err != nil {
+	if _, err := db.Exec(r.Context(), sess(r).DB, "", stmt, 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -146,7 +150,7 @@ func (a *API) handleCreateDatabase(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleDropDatabase(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("db")
-	if _, err := db.Exec(r.Context(), sess(r).DB, "", "DROP DATABASE "+db.QuoteIdent(name)); err != nil {
+	if _, err := db.Exec(r.Context(), sess(r).DB, "", "DROP DATABASE "+db.QuoteIdent(name), 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -219,7 +223,7 @@ func (a *API) handleDropTable(w http.ResponseWriter, r *http.Request) {
 	schema := r.PathValue("db")
 	table := r.PathValue("table")
 	stmt := "DROP TABLE " + db.QuoteIdent(schema) + "." + db.QuoteIdent(table)
-	if _, err := db.Exec(r.Context(), sess(r).DB, "", stmt); err != nil {
+	if _, err := db.Exec(r.Context(), sess(r).DB, "", stmt, 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -239,7 +243,7 @@ func (a *API) handleQuery(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "sql statement required")
 		return
 	}
-	rs, err := db.Exec(r.Context(), sess(r).DB, req.Database, req.SQL)
+	rs, err := db.Exec(r.Context(), sess(r).DB, req.Database, req.SQL, queryRowCap)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

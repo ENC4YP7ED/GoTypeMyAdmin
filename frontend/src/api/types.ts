@@ -60,6 +60,7 @@ export interface ResultSet {
   lastInsertId: number;
   durationMs: number;
   isQuery: boolean;
+  truncated?: boolean;
 }
 
 export interface BrowseResult {

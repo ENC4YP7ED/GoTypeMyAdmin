@@ -29,9 +29,29 @@ func New(cfg Config) *http.Server {
 
 	return &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           logging(mux),
+		Handler:           secureHeaders(mux),
 		ReadHeaderTimeout: 15 * time.Second,
 	}
+}
+
+// secureHeaders applies defense-in-depth response headers. The CSP is strict —
+// the production bundle has no inline scripts/styles, only same-origin assets —
+// which neutralizes whole classes of reflected/stored XSS even if a sink slips
+// through.
+func secureHeaders(next http.Handler) http.Handler {
+	// font-src/img-src allow data: because Vite inlines small font/image assets
+	// as data URIs; these are inert and cannot execute script.
+	const csp = "default-src 'self'; script-src 'self'; style-src 'self'; " +
+		"font-src 'self' data:; img-src 'self' data:; connect-src 'self'; " +
+		"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", csp)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // spaHandler serves files from dir, falling back to index.html so client-side
@@ -47,11 +67,5 @@ func spaHandler(dir string) http.Handler {
 			}
 		}
 		fs.ServeHTTP(w, r)
-	})
-}
-
-func logging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
 	})
 }

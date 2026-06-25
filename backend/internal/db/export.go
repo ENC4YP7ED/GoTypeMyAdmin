@@ -23,7 +23,7 @@ const (
 // ExportTable serializes a whole table in the requested format. For SQL it
 // emits the CREATE statement followed by INSERTs.
 func ExportTable(ctx context.Context, db *sql.DB, schema, table string, format ExportFormat) (string, string, error) {
-	rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(table))
+	rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(table), 0)
 	if err != nil {
 		return "", "", err
 	}
@@ -61,7 +61,7 @@ func ExportDatabase(ctx context.Context, db *sql.DB, schema string) (string, err
 		if err != nil {
 			return "", err
 		}
-		rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(t.Name))
+		rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(t.Name), 0)
 		if err != nil {
 			return "", err
 		}
