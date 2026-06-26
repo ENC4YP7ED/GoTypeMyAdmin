@@ -413,6 +413,8 @@
   border-right: 1px solid var(--border); user-select: none; vertical-align: middle;
 }
 thead .gtma-grid__rownum { z-index: 3; background: var(--gray-75); }
+/* Beat `.gtma-grid thead th { text-align:left }` for the # header cell. */
+.gtma-grid thead th.gtma-grid__rownum { text-align: center; }
 .gtma-grid__cell {
   padding: 9px 14px; border-bottom: 1px solid var(--border);
   color: var(--text); max-width: 460px; overflow: hidden;
