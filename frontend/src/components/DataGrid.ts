@@ -31,7 +31,24 @@ const NUMERIC = /^(INT|BIGINT|SMALLINT|TINYINT|MEDIUMINT|DECIMAL|FLOAT|DOUBLE|YE
 /** Spreadsheet-style result grid: sticky header, NULL styling, cell copy. */
 export function DataGrid(opts: DataGridOptions): DataGridHandle {
   const table = el("table.gtma-grid");
-  const root = el("div.gtma-grid__scroll", {}, table);
+  const root = el("div.gtma-grid__scroll", {}, table) as HTMLDivElement;
+
+  // Let the vertical wheel pan the table horizontally when it overflows
+  // sideways — natural for wide result sets. Vertical scrolling still wins
+  // while there's room to scroll up/down; at the vertical edges (or when the
+  // table fits vertically) the wheel moves left/right instead.
+  root.addEventListener("wheel", (e: WheelEvent) => {
+    const canX = root.scrollWidth - root.clientWidth > 1;
+    if (!canX || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const canY = root.scrollHeight - root.clientHeight > 1;
+    if (canY) {
+      const atTop = root.scrollTop <= 0;
+      const atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 1;
+      if (e.deltaY < 0 ? !atTop : !atBottom) return; // still vertical room
+    }
+    root.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
 
   function render(columns: GridColumn[], rows: Array<Array<string | null>>, sortBy?: string, sortDir?: string) {
     clear(table);

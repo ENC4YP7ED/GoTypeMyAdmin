@@ -426,6 +426,11 @@ thead .gtma-grid__rownum { z-index: 3; background: var(--gray-75); }
 .gtma-grid__cell--null { color: var(--text-disabled); font-style: italic; font-size: var(--fs-xs); }
 .gtma-grid__cell--num { text-align: right; color: var(--gray-950); }
 .gtma-grid__empty { padding: 28px; text-align: center; color: var(--text-faint); }
+/* Breathing room at the table's left/right edges. The cell backgrounds still
+   reach the container border (no black gutters) — only the content is inset. */
+.gtma-grid__rownum { padding-left: var(--sp-5); }
+.gtma-grid__cell:last-child { padding-right: var(--sp-6); }
+.gtma-grid__th:last-child .gtma-grid__th-inner { padding-right: var(--sp-6); }
 
 /* ---- CodeEditor ----------------------------------------------------------- */
 .gtma-editor {
