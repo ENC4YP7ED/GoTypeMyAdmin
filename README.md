@@ -118,7 +118,46 @@ desaturated to sit calmly on black. Tokens live in
 - Create / drop databases and drop tables, with confirmation dialogs
 - Right-click context menus throughout
 
-## Running it
+## Download a prebuilt binary
+
+Each release ships a **self-contained single file per platform** — the frontend
+is embedded into the binary, so there's nothing else to install. Grab the
+archive for your OS/CPU from the [Releases](../../releases) page, extract, and
+run:
+
+```bash
+tar xzf gotypemyadmin_*_linux_amd64.tar.gz   # or unzip the .zip on Windows
+./gotypemyadmin -addr :8088                   # → open http://localhost:8088
+```
+
+Releases are cross-compiled for **every Go-supported OS/CPU target** (~45),
+including:
+
+| OS | Architectures |
+| -- | ------------- |
+| **Linux** | amd64, arm64, arm, 386, ppc64le, ppc64, riscv64, s390x, mips/mips64(le), loong64 |
+| **macOS** (darwin) | amd64 (Intel), arm64 (Apple Silicon) |
+| **Windows** | amd64, arm64, 386 |
+| **FreeBSD / OpenBSD / NetBSD / DragonFly** | amd64, arm64, arm, 386, … |
+| **Solaris / illumos / AIX** | amd64, ppc64 |
+| **Android** | amd64, arm64, arm, 386 |
+
+Verify downloads against `SHA256SUMS` in the release.
+
+### Build releases yourself
+
+```bash
+make release          # cross-compiles every target into ./dist-bin (+ SHA256SUMS)
+# or a subset:
+TARGETS="linux/amd64 darwin/arm64 windows/amd64" make release
+```
+
+`scripts/build-release.sh` builds the frontend once, embeds it, then loops the
+Go matrix with `CGO_ENABLED=0` (no C toolchain needed — the MySQL driver is pure
+Go). A tagged push (`git tag v0.1.0 && git push --tags`) runs the same matrix in
+CI and attaches the archives to a GitHub Release.
+
+## Running from source
 
 Requirements: **Go 1.22+** and **Node 18+**.
 
@@ -130,7 +169,10 @@ make install
 make run
 #    → open http://localhost:8088
 
-# 2b. or hot-reload dev: two terminals
+# 2b. one self-contained binary for your machine (frontend embedded)
+make build-embed && ./bin/gotypemyadmin
+
+# 2c. or hot-reload dev: two terminals
 make dev-backend      # Go API on :8088
 make dev-frontend     # Vite on :5173 (proxies /api → :8088)
 ```
@@ -151,6 +193,7 @@ make test-db-stop
 | `-static` / `GTMA_STATIC` | `../frontend/dist`| built frontend directory         |
 | `-session-ttl`         | `2h`                 | idle lifetime of a DB session    |
 | `-allow-hosts` / `GTMA_ALLOW_HOSTS` | _(empty = any)_ | comma-separated allowlist of DB hosts clients may connect to |
+| `-version`             | —                    | print version + platform and exit |
 
 ## REST API
 

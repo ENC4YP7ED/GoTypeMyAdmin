@@ -1,7 +1,12 @@
 # build artifacts
 /bin/
+/dist-bin/
 frontend/dist/
 frontend/node_modules/
+
+# embedded frontend copied in only for release builds (keep the placeholder)
+backend/web/dist/*
+!backend/web/dist/.gitkeep
 
 # go
 backend/gotypemyadmin

@@ -31,6 +31,16 @@ build: build-frontend ## Build the single production binary (embeds nothing; ser
 	cd $(BACKEND) && go build -o ../$(BIN) .
 	@echo "built ./$(BIN)"
 
+.PHONY: build-embed
+build-embed: build-frontend ## Build one self-contained binary for THIS platform (frontend embedded)
+	rm -rf $(BACKEND)/web/dist && mkdir -p $(BACKEND)/web/dist && cp -r $(FRONTEND)/dist/. $(BACKEND)/web/dist/
+	cd $(BACKEND) && go build -ldflags "-s -w" -o ../$(BIN) .
+	@echo "built self-contained ./$(BIN)"
+
+.PHONY: release
+release: ## Cross-compile self-contained archives for every OS/CPU into dist-bin/
+	bash scripts/build-release.sh
+
 .PHONY: run
 run: build ## Build everything and run the server
 	GTMA_STATIC=$(FRONTEND)/dist ./$(BIN) -addr $(ADDR)
@@ -50,4 +60,5 @@ tidy: ## go mod tidy
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf $(BIN) $(FRONTEND)/dist
+	rm -rf $(BIN) dist-bin $(FRONTEND)/dist $(BACKEND)/web/dist/*
+	@touch $(BACKEND)/web/dist/.gitkeep

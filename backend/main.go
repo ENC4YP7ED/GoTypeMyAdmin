@@ -9,10 +9,12 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -20,7 +22,11 @@ import (
 	"gotypemyadmin/internal/api"
 	"gotypemyadmin/internal/server"
 	"gotypemyadmin/internal/session"
+	"gotypemyadmin/web"
 )
+
+// version is overridden at build time via -ldflags "-X main.version=…".
+var version = "dev"
 
 func main() {
 	addr := flag.String("addr", envOr("GTMA_ADDR", ":8088"), "listen address")
@@ -28,7 +34,13 @@ func main() {
 	sessionTTL := flag.Duration("session-ttl", 2*time.Hour, "idle lifetime of a database session")
 	allowHostsRaw := flag.String("allow-hosts", envOr("GTMA_ALLOW_HOSTS", ""),
 		"comma-separated allowlist of database hosts clients may connect to (empty = any)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("GoTypeMyAdmin %s (%s/%s, %s)\n", version, runtime.GOOS, runtime.GOARCH, runtime.Version())
+		return
+	}
 
 	allowHosts := splitCSV(*allowHostsRaw)
 	if len(allowHosts) == 0 {
@@ -38,15 +50,22 @@ func main() {
 	sessions := session.NewStore(*sessionTTL)
 	defer sessions.Close()
 
-	apiHandler := api.New(sessions, api.Config{AllowHosts: allowHosts})
-	srv := server.New(server.Config{
+	// Prefer the frontend embedded into the binary (release builds); otherwise
+	// serve it from -static on disk (dev builds).
+	srvCfg := server.Config{
 		Addr:      *addr,
 		StaticDir: *staticDir,
-		API:       apiHandler,
-	})
+		API:       api.New(sessions, api.Config{AllowHosts: allowHosts}),
+	}
+	staticSource := *staticDir
+	if dist, ok := web.Dist(); ok {
+		srvCfg.StaticFS = server.SPAFromFS(dist)
+		staticSource = "embedded"
+	}
+	srv := server.New(srvCfg)
 
 	go func() {
-		log.Printf("GoTypeMyAdmin listening on %s (serving static from %s)", *addr, *staticDir)
+		log.Printf("GoTypeMyAdmin %s listening on %s (frontend: %s)", version, *addr, staticSource)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server error: %v", err)
 		}

@@ -3,8 +3,10 @@
 package server
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,7 +16,10 @@ import (
 type Config struct {
 	Addr      string
 	StaticDir string
-	API       http.Handler
+	// StaticFS, when non-nil, serves the frontend from an embedded filesystem
+	// instead of StaticDir on disk (used by self-contained release binaries).
+	StaticFS http.Handler
+	API      http.Handler
 }
 
 // New builds an *http.Server ready to ListenAndServe.
@@ -24,14 +29,34 @@ func New(cfg Config) *http.Server {
 	// Everything under /api is the JSON backend.
 	mux.Handle("/api/", http.StripPrefix("/api", cfg.API))
 
-	// Everything else is the single-page app.
-	mux.Handle("/", spaHandler(cfg.StaticDir))
+	// Everything else is the single-page app: embedded FS if present, else disk.
+	if cfg.StaticFS != nil {
+		mux.Handle("/", cfg.StaticFS)
+	} else {
+		mux.Handle("/", spaHandler(cfg.StaticDir))
+	}
 
 	return &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           secureHeaders(mux),
 		ReadHeaderTimeout: 15 * time.Second,
 	}
+}
+
+// SPAFromFS builds a SPA-aware handler over an embedded filesystem, falling
+// back to index.html for unknown non-asset paths so deep links work.
+func SPAFromFS(fsys fs.FS) http.Handler {
+	fileServer := http.FileServerFS(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if p == "" {
+			p = "index.html"
+		}
+		if _, err := fs.Stat(fsys, p); err != nil && !strings.HasPrefix(r.URL.Path, "/assets") {
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 // secureHeaders applies defense-in-depth response headers. The CSP is strict —
