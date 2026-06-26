@@ -131,7 +131,7 @@ export function SqlConsole(opts: SqlConsoleOptions = {}): HTMLElement {
         columns: rs.columns.map((name, i) => ({ name, type: rs.columnTypes[i] })),
         rows: rs.rows,
       });
-      resultArea.append(meta, grid.el);
+      resultArea.append(meta, el("div.gtma-sql__gridwrap", {}, grid.el));
     } else {
       resultArea.append(meta, EmptyState({ icon: "circle-check", title: "Statement executed", description: `${formatNumber(rs.rowsAffected)} row(s) affected.` }));
     }

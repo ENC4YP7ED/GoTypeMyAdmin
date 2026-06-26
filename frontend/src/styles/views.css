@@ -203,7 +203,12 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 .gtma-sql__editor .gtma-editor { max-height: 320px; }
 .gtma-sql__result { border-top: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 .gtma-sql__meta { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-5); flex: none; }
-.gtma-sql__result .gtma-grid__scroll { border-top: 1px solid var(--border); }
+/* Inset the result grid to match the meta bar (padding on the wrapper, outside
+   the scroll viewport, so the sticky #/header stay correct). */
+.gtma-sql__gridwrap {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  overflow: hidden; padding-inline: var(--sp-5); border-top: 1px solid var(--border);
+}
 .gtma-sql__running { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-8); color: var(--text-muted); justify-content: center; }
 .gtma-sql__error { padding: var(--sp-5); }
 .gtma-sql__error > .row { color: var(--danger); margin-bottom: var(--sp-3); }
