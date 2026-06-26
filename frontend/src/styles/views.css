@@ -154,14 +154,14 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 
 /* ---- Table workspace ------------------------------------------------------ */
 .gtma-table { overflow: hidden; }
-.gtma-table__head { padding: var(--sp-5) var(--sp-8) var(--sp-3); flex: none; }
+.gtma-table__head { padding: var(--sp-6) var(--sp-8) var(--sp-4); flex: none; }
 .gtma-table .gtma-page__head { align-items: center; }
 
 .gtma-browse { overflow: hidden; }
 .gtma-browse__grid { overflow: hidden; }
 .gtma-browse__pager {
   display: flex; align-items: center; gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-5); border-top: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--border);
   flex: none; background: var(--gray-25);
 }
 .gtma-browse__page { font-size: var(--fs-sm); color: var(--text-muted); padding: 0 var(--sp-2); }
@@ -224,7 +224,7 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 
 .gtma-browse__toolbar {
   display: flex; align-items: center; gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-5); border-bottom: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--border);
   flex: none; background: var(--gray-25);
 }
 .gtma-browse__hint { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
@@ -232,7 +232,7 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 /* ---- Browse filter bar ---------------------------------------------------- */
 .gtma-filter {
   display: flex; flex-direction: column; gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-5); border-bottom: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--border);
   background: var(--gray-25); flex: none;
 }
 .gtma-filter__row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
