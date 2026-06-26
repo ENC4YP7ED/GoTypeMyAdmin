@@ -158,7 +158,10 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 .gtma-table .gtma-page__head { align-items: center; }
 
 .gtma-browse { overflow: hidden; }
-.gtma-browse__grid { overflow: hidden; }
+/* Inset the grid to align with the inset toolbar content above/below it.
+   Padding lives on this wrapper (outside the scroll viewport), so the sticky
+   #/header columns stay correct and nothing bleeds into the gutter. */
+.gtma-browse__grid { overflow: hidden; padding-inline: var(--sp-5); }
 .gtma-browse__pager {
   display: flex; align-items: center; gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--border);
