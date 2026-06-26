@@ -398,7 +398,7 @@
   color: var(--text-muted); white-space: nowrap;
   padding: 0;
 }
-.gtma-grid__th-inner { display: flex; align-items: center; gap: var(--sp-2); padding: 9px 12px; }
+.gtma-grid__th-inner { display: flex; align-items: center; gap: var(--sp-2); padding: 10px 14px; }
 .gtma-grid__th.is-sortable { cursor: pointer; }
 .gtma-grid__th.is-sortable:hover { background: var(--gray-100); color: var(--text); }
 .gtma-grid__th.is-sorted { color: var(--text-strong); }
@@ -408,15 +408,16 @@
 .gtma-grid__rownum {
   position: sticky; left: 0; z-index: 1;
   background: var(--gray-50); color: var(--text-faint);
-  text-align: right; padding: 7px 10px; font-family: var(--font-mono);
+  text-align: right; padding: 9px 12px; font-family: var(--font-mono);
   font-size: var(--fs-xs); border-bottom: 1px solid var(--border);
-  border-right: 1px solid var(--border); user-select: none;
+  border-right: 1px solid var(--border); user-select: none; vertical-align: middle;
 }
 thead .gtma-grid__rownum { z-index: 3; background: var(--gray-75); }
 .gtma-grid__cell {
-  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
   color: var(--text); max-width: 460px; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; vertical-align: top;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
+  line-height: 1.5;
 }
 .gtma-grid__row:hover .gtma-grid__cell { background: var(--gray-25); }
 .gtma-grid__row:hover .gtma-grid__rownum { background: var(--gray-100); color: var(--text-muted); }
