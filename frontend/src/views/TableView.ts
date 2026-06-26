@@ -2,6 +2,8 @@ import { el, icon, clear } from "../core/dom.ts";
 import { Button, IconButton } from "../components/Button.ts";
 import { Tabs } from "../components/Tabs.ts";
 import { DataGrid } from "../components/DataGrid.ts";
+import { Select } from "../components/Select.ts";
+import { TextInput } from "../components/TextInput.ts";
 import { LoadingState, EmptyState, Field, Segmented } from "../components/misc.ts";
 import { confirmModal } from "../components/Modal.ts";
 import { SqlConsole } from "./SqlConsole.ts";
@@ -10,11 +12,12 @@ import { download } from "../util/download.ts";
 import { notify } from "../components/Toast.ts";
 import { tooltip } from "../components/Tooltip.ts";
 import { api } from "../api/client.ts";
+import { navigate } from "../state/store.ts";
 import { formatNumber, formatDuration } from "../util/format.ts";
-import type { ColumnMeta, ExportFormat, IndexMeta } from "../api/types.ts";
+import type { ColumnMeta, ExportFormat, ForeignKey, IndexMeta, SearchCondition } from "../api/types.ts";
 
 /** The per-table workspace: Browse · Structure · SQL · Export. */
-export function TableView(database: string, table: string): HTMLElement {
+export function TableView(database: string, table: string, initialFilter?: SearchCondition[]): HTMLElement {
   const header = el("div.gtma-page__head",
     el("div.col.gap-1",
       el("div.row.gap-2.muted",
@@ -27,7 +30,7 @@ export function TableView(database: string, table: string): HTMLElement {
   );
 
   const tabs = Tabs([
-    { id: "browse", label: "Browse", icon: "table-list", render: () => BrowseTab(database, table) },
+    { id: "browse", label: "Browse", icon: "table-list", render: () => BrowseTab(database, table, initialFilter) },
     { id: "structure", label: "Structure", icon: "diagram-project", render: () => StructureTab(database, table) },
     { id: "sql", label: "SQL", icon: "terminal", render: () => SqlConsole({ database, initialSQL: `SELECT * FROM \`${table}\` LIMIT 50;` }) },
     { id: "export", label: "Export", icon: "file-export", render: () => ExportTab(database, table) },
@@ -36,35 +39,97 @@ export function TableView(database: string, table: string): HTMLElement {
   return el("div.gtma-page.gtma-table.col.grow", el("div.gtma-table__head", header), tabs.el);
 }
 
+const SEARCH_OPS = ["=", "!=", "<", ">", "<=", ">=", "LIKE", "NOT LIKE", "IS NULL", "IS NOT NULL"];
+
 // ---- Browse ----------------------------------------------------------------
 
-function BrowseTab(database: string, table: string): HTMLElement {
+function BrowseTab(database: string, table: string, initialFilter?: SearchCondition[]): HTMLElement {
   const root = el("div.gtma-browse.col.grow");
+  const filterSlot = el("div");      // persistent filter bar
+  const body = el("div.col.grow");   // reloaded grid + pager
+  root.append(filterSlot, body);
+
   let limit = 50;
   let offset = 0;
   let orderBy = "";
   let dir: "asc" | "desc" = "asc";
   let total = 0;
   let columns: ColumnMeta[] = [];
+  let foreignKeys: ForeignKey[] = [];
+  let conditions: SearchCondition[] = initialFilter ? [...initialFilter] : [];
 
-  load();
+  init();
+
+  async function init() {
+    try {
+      [columns, foreignKeys] = await Promise.all([
+        api.columns(database, table),
+        api.foreignKeys(database, table).catch(() => [] as ForeignKey[]),
+      ]);
+    } catch { /* keep going; grid still renders from result columns */ }
+    renderFilterBar();
+    load();
+  }
 
   async function load() {
-    clear(root);
-    root.appendChild(LoadingState("Fetching rows…"));
+    clear(body);
+    body.appendChild(LoadingState("Fetching rows…"));
     try {
-      const [res, cols] = await Promise.all([
-        api.browse(database, table, { limit, offset, orderBy, dir }),
-        columns.length ? Promise.resolve(columns) : api.columns(database, table),
-      ]);
-      columns = cols;
+      const res = conditions.length
+        ? await api.search(database, table, { conditions, limit, offset, orderBy, dir })
+        : await api.browse(database, table, { limit, offset, orderBy, dir });
       total = res.total;
-      clear(root);
-      root.appendChild(build(res));
+      clear(body);
+      body.appendChild(build(res));
     } catch (err) {
-      clear(root);
-      root.appendChild(EmptyState({ icon: "triangle-exclamation", title: "Browse failed", description: String(err) }));
+      clear(body);
+      body.appendChild(EmptyState({ icon: "triangle-exclamation", title: "Browse failed", description: String(err) }));
     }
+  }
+
+  // ---- filter bar (persistent so the draft doesn't reset on reload) ----
+  function renderFilterBar() {
+    clear(filterSlot);
+    if (!columns.length) return;
+    const colSel = Select({ size: "sm", searchable: true, options: columns.map((c) => ({ value: c.name, label: c.name, icon: c.key === "PRI" ? "key" : undefined })) });
+    const opSel = Select({ size: "sm", value: "=", options: SEARCH_OPS.map((o) => ({ value: o, label: o })) });
+    const valInput = TextInput({ size: "sm", placeholder: "value" });
+
+    const addFilter = () => {
+      const op = opSel.value;
+      const noValue = op === "IS NULL" || op === "IS NOT NULL";
+      conditions.push({ column: colSel.value, op, value: noValue ? "" : valInput.value });
+      valInput.value = "";
+      offset = 0;
+      renderFilterBar();
+      load();
+    };
+    valInput.input.addEventListener("keydown", (e) => { if (e.key === "Enter") addFilter(); });
+
+    const chips = conditions.map((c, idx) =>
+      el("button.gtma-filter__chip", {
+        attrs: { type: "button", title: "Remove filter" },
+        onclick: () => { conditions.splice(idx, 1); offset = 0; renderFilterBar(); load(); },
+      },
+        el("span.mono", {}, c.column),
+        el("span.gtma-filter__op", {}, c.op),
+        c.value ? el("span.mono.gtma-filter__val", {}, c.value) : null,
+        icon("xmark", { class: "gtma-filter__x" }),
+      ));
+
+    filterSlot.appendChild(el("div.gtma-filter",
+      el("div.gtma-filter__row",
+        icon("filter", { class: "muted" }),
+        colSel.el, opSel.el, valInput.el,
+        Button({ label: "Add filter", icon: "plus", size: "sm", onClick: addFilter }),
+      ),
+      conditions.length
+        ? el("div.gtma-filter__chips",
+            ...chips,
+            el("button.gtma-filter__clear", { attrs: { type: "button" }, onclick: () => { conditions = []; offset = 0; renderFilterBar(); load(); } },
+              icon("xmark"), el("span", {}, "Clear all")))
+        : null,
+    ));
   }
 
   async function deleteRow(rowIndex: number, rs: Awaited<ReturnType<typeof api.browse>>["result"]) {
@@ -88,10 +153,18 @@ function BrowseTab(database: string, table: string): HTMLElement {
   function build(res: Awaited<ReturnType<typeof api.browse>>): HTMLElement {
     const rs = res.result;
     const editable = columns.length > 0 && res.result.columns.length === columns.length;
+    const fkByColumn = new Map(foreignKeys.map((fk) => [fk.column, fk]));
     const grid = DataGrid({
       columns: rs.columns.map((name, i) => {
         const meta = columns.find((c) => c.name === name);
-        return { name, type: rs.columnTypes[i], primary: meta?.key === "PRI" };
+        const fk = fkByColumn.get(name);
+        return {
+          name, type: rs.columnTypes[i], primary: meta?.key === "PRI",
+          link: fk ? (value: string) => navigate({
+            kind: "table", database: fk.refSchema || database, table: fk.refTable,
+            filter: [{ column: fk.refColumn, op: "=", value }],
+          }) : undefined,
+        };
       }),
       rows: rs.rows,
       rowNumberStart: offset + 1,
@@ -168,16 +241,20 @@ function StructureTab(database: string, table: string): HTMLElement {
     clear(root);
     root.appendChild(LoadingState());
     try {
-      const [columns, indexes] = await Promise.all([api.columns(database, table), api.indexes(database, table)]);
+      const [columns, indexes, fks] = await Promise.all([
+        api.columns(database, table),
+        api.indexes(database, table),
+        api.foreignKeys(database, table).catch(() => [] as ForeignKey[]),
+      ]);
       clear(root);
-      root.appendChild(build(columns, indexes));
+      root.appendChild(build(columns, indexes, fks));
     } catch (err) {
       clear(root);
       root.appendChild(EmptyState({ icon: "triangle-exclamation", title: "Could not load structure", description: String(err) }));
     }
   }
 
-  function build(columns: ColumnMeta[], indexes: IndexMeta[]): HTMLElement {
+  function build(columns: ColumnMeta[], indexes: IndexMeta[], fks: ForeignKey[]): HTMLElement {
     const colGrid = DataGrid({
       columns: [
         { name: "Column" }, { name: "Type" }, { name: "Null" },
@@ -196,11 +273,24 @@ function StructureTab(database: string, table: string): HTMLElement {
 
     const pk = columns.filter((c) => c.key === "PRI").map((c) => c.name);
 
+    const fkSection = fks.length ? el("div.gtma-structure__section",
+      el("h3.gtma-structure__h", icon("link"), "Foreign keys"),
+      DataGrid({
+        columns: [{ name: "Constraint" }, { name: "Column" }, { name: "References" }, { name: "On update" }, { name: "On delete" }],
+        rows: fks.map((fk) => [
+          fk.name, fk.column,
+          `${fk.refTable}.${fk.refColumn}`,
+          fk.onUpdate, fk.onDelete,
+        ]),
+      }).el,
+    ) : null;
+
     return el("div.gtma-structure__inner",
       el("div.gtma-structure__summary",
         Field("Columns", String(columns.length)),
         Field("Primary key", pk.length ? el("span.mono", {}, pk.join(", ")) : el("span.faint", {}, "none")),
         Field("Indexes", String(indexes.length)),
+        Field("Foreign keys", String(fks.length)),
       ),
       el("div.gtma-structure__section",
         el("h3.gtma-structure__h", icon("diagram-project"), "Columns"),
@@ -210,6 +300,7 @@ function StructureTab(database: string, table: string): HTMLElement {
         el("h3.gtma-structure__h", icon("list"), "Indexes"),
         idxGrid,
       ),
+      fkSection,
     );
   }
 

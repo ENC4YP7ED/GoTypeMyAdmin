@@ -1,6 +1,7 @@
 import type {
   BrowseResult, CellValue, ColumnMeta, ConnectResult, DatabaseMeta,
-  ExportFormat, ImportResult, IndexMeta, ResultSet, ServerInfo, TableMeta, UserMeta,
+  ExportFormat, ForeignKey, ImportResult, IndexMeta, ResultSet, SearchCondition,
+  ServerInfo, TableMeta, UserMeta,
 } from "./types.ts";
 
 const TOKEN_KEY = "gtma.token";
@@ -119,6 +120,15 @@ class ApiClient {
     if (params.orderBy) q.set("orderBy", params.orderBy);
     if (params.dir) q.set("dir", params.dir);
     return this.request("GET", `/databases/${encodeURIComponent(db)}/tables/${encodeURIComponent(table)}/rows?${q}`);
+  }
+
+  async foreignKeys(db: string, table: string): Promise<ForeignKey[]> {
+    const r = await this.request<{ foreignKeys: ForeignKey[] }>("GET", `${this.tablePath(db, table)}/foreign-keys`);
+    return r.foreignKeys ?? [];
+  }
+
+  search(db: string, table: string, params: { conditions: SearchCondition[]; limit: number; offset: number; orderBy?: string; dir?: string }): Promise<BrowseResult> {
+    return this.request("POST", `${this.tablePath(db, table)}/search`, params);
   }
 
   async ddl(db: string, table: string): Promise<string> {

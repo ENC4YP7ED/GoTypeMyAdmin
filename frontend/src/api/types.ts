@@ -86,6 +86,22 @@ export interface UserMeta {
   locked: boolean;
 }
 
+export interface ForeignKey {
+  name: string;
+  column: string;
+  refSchema: string;
+  refTable: string;
+  refColumn: string;
+  onUpdate: string;
+  onDelete: string;
+}
+
+export interface SearchCondition {
+  column: string;
+  op: string;
+  value: string;
+}
+
 export type ExportFormat = "sql" | "csv" | "json";
 
 /** A nullable cell value used when writing rows (null === SQL NULL). */

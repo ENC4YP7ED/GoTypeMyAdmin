@@ -229,6 +229,43 @@ button.gtma-breadcrumb__item:hover { background: var(--gray-100); color: var(--t
 }
 .gtma-browse__hint { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
 
+/* ---- Browse filter bar ---------------------------------------------------- */
+.gtma-filter {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-5); border-bottom: 1px solid var(--border);
+  background: var(--gray-25); flex: none;
+}
+.gtma-filter__row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.gtma-filter__row .gtma-select { min-width: 130px; }
+.gtma-filter__row .gtma-input { width: 160px; }
+.gtma-filter__chips { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.gtma-filter__chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--gray-150); border: 1px solid var(--border-strong);
+  color: var(--text); font-size: var(--fs-xs); padding: 3px 9px; border-radius: var(--r-full);
+}
+.gtma-filter__chip:hover { border-color: var(--gray-500); }
+.gtma-filter__op { color: var(--text-faint); font-weight: var(--fw-semibold); }
+.gtma-filter__val { color: var(--success); }
+.gtma-filter__x { color: var(--text-faint); font-size: 9px; }
+.gtma-filter__chip:hover .gtma-filter__x { color: var(--danger); }
+.gtma-filter__clear {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; color: var(--text-faint);
+  font-size: var(--fs-xs); padding: 3px 6px; border-radius: var(--r-sm);
+}
+.gtma-filter__clear:hover { color: var(--text); background: var(--gray-100); }
+
+/* ---- Foreign-key cell links ---------------------------------------------- */
+.gtma-grid__fk {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  background: none; border: none; padding: 0; color: var(--info);
+  font: inherit; cursor: pointer;
+}
+.gtma-grid__fk .fa-icon { font-size: 9px; opacity: 0.6; }
+.gtma-grid__fk:hover { text-decoration: underline; color: var(--gray-1000); }
+.gtma-grid__fk:hover .fa-icon { opacity: 1; }
+
 /* ---- Row editor ----------------------------------------------------------- */
 .gtma-roweditor { display: flex; flex-direction: column; gap: var(--sp-4); }
 .gtma-roweditor__field { display: flex; flex-direction: column; gap: 6px; }

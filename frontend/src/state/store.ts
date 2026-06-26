@@ -1,5 +1,5 @@
 import { signal } from "../core/reactive.ts";
-import type { ServerInfo } from "../api/types.ts";
+import type { ServerInfo, SearchCondition } from "../api/types.ts";
 
 /** What the main content area is currently showing. */
 export type Route =
@@ -7,7 +7,7 @@ export type Route =
   | { kind: "sql"; database?: string }
   | { kind: "users" }
   | { kind: "database"; database: string }
-  | { kind: "table"; database: string; table: string };
+  | { kind: "table"; database: string; table: string; filter?: SearchCondition[] };
 
 export const store = {
   connected: signal(false),

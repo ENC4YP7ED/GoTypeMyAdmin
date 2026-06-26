@@ -7,6 +7,8 @@ export interface GridColumn {
   name: string;
   type?: string;
   primary?: boolean;
+  /** When set, the cell value renders as a link (e.g. a foreign key). */
+  link?: (value: string) => void;
 }
 
 export interface DataGridOptions {
@@ -80,6 +82,13 @@ export function DataGrid(opts: DataGridOptions): DataGridHandle {
     }
     const numeric = col?.type ? NUMERIC.test(col.type) : false;
     const truncated = cell.length > 220 ? cell.slice(0, 220) + "…" : cell;
+    if (col?.link) {
+      return el("td.gtma-grid__cell", { class: numeric ? "gtma-grid__cell--num" : "" },
+        el("button.gtma-grid__fk", {
+          attrs: { type: "button", title: `Jump to referenced row (${cell})` },
+          onclick: (e: MouseEvent) => { e.stopPropagation(); col.link!(cell); },
+        }, el("span.mono.truncate", {}, truncated), icon("arrow-up-right-from-square")));
+    }
     return el("td.gtma-grid__cell", {
       class: numeric ? "gtma-grid__cell--num mono" : "",
       attrs: { title: cell.length > 80 ? cell : null },

@@ -161,7 +161,7 @@ function renderRoute(route: Route): HTMLElement {
   switch (route.kind) {
     case "home": return HomeView();
     case "database": return DatabaseView(route.database);
-    case "table": return TableView(route.database, route.table);
+    case "table": return TableView(route.database, route.table, route.filter);
     case "sql": return SqlConsole(route.database ? { database: route.database } : {});
     case "users": return UsersView();
   }

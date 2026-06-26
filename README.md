@@ -105,9 +105,13 @@ desaturated to sit calmly on black. Tokens live in
 - Server overview: version, uptime, database/table/size rollups
 - Navigate databases & tables in a lazy sidebar tree
 - **Browse** table rows with pagination, page-size control and column sorting
+- **Filter / search** rows with stackable column conditions (`=`, `LIKE`,
+  `IS NULL`, comparisons, …) combined as parameterized `WHERE` clauses
 - **Insert / edit / duplicate / delete rows** with a generated form (NULL &
   DEFAULT toggles, auto-increment awareness, primary-key-based row identity)
-- **Structure** view: columns, keys, defaults, indexes
+- **Foreign-key aware**: relationships listed in Structure, and FK values in
+  Browse are clickable — jump straight to the referenced row
+- **Structure** view: columns, keys, defaults, indexes, foreign keys
 - **SQL console** (global, per-database, or per-table) with syntax highlighting,
   `Ctrl/Cmd+Enter` to run, timing and affected-row reporting
 - **Import** a `.sql` script: multi-statement execution with comment handling
@@ -209,6 +213,8 @@ make test-db-stop
 | `GET /api/databases/{db}/tables/{t}/columns` | column structure |
 | `GET /api/databases/{db}/tables/{t}/indexes` | indexes |
 | `GET /api/databases/{db}/tables/{t}/rows` | paginated browse (`limit`,`offset`,`orderBy`,`dir`) |
+| `POST /api/databases/{db}/tables/{t}/search` | filtered browse (parameterized conditions) |
+| `GET /api/databases/{db}/tables/{t}/foreign-keys` | outgoing foreign keys |
 | `GET /api/databases/{db}/tables/{t}/ddl` | `SHOW CREATE TABLE` |
 | `GET /api/databases/{db}/tables/{t}/export?format=` | export table as sql/csv/json |
 | `GET /api/databases/{db}/export` | dump a whole database to SQL |
@@ -254,11 +260,11 @@ How each class is handled here:
 
 ## Status & roadmap
 
-A working tool covering the most-used phpMyAdmin workflows: browse & edit data,
-SQL console, import/export, schema browsing, and user management. Natural next
-steps: relation/foreign-key visualization, bulk row operations, CSV *import*,
-saved queries/bookmarks, and multi-engine support (PostgreSQL/SQLite behind the
-same API).
+A working tool covering the most-used phpMyAdmin workflows: browse, filter &
+edit data, foreign-key navigation, SQL console, import/export, schema browsing,
+and user management. Natural next steps: bulk row operations, CSV *import*,
+saved queries/bookmarks, ALTER-column editing, and multi-engine support
+(PostgreSQL/SQLite behind the same API).
 
 ## License
 
