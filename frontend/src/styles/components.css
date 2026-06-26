@@ -408,7 +408,7 @@
 .gtma-grid__rownum {
   position: sticky; left: 0; z-index: 1;
   background: var(--gray-50); color: var(--text-faint);
-  text-align: right; padding: 9px 12px; font-family: var(--font-mono);
+  text-align: center; padding: 9px 12px; font-family: var(--font-mono);
   font-size: var(--fs-xs); border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border); user-select: none; vertical-align: middle;
 }
