@@ -30,27 +30,26 @@ export function SqlConsole(opts: SqlConsoleOptions = {}): HTMLElement {
   let running = false;
   const runBtn = Button({ label: "Run", icon: "play", variant: "primary", onClick: () => run() });
 
-  // Hidden file input drives the "Import .sql" action.
+  // Hidden file input drives the "Import .sql" action. The File is uploaded as
+  // a stream (never read into a JS string), so the import size is unbounded.
   const fileInput = el("input", {
     attrs: { type: "file", accept: ".sql,.txt", hidden: true },
     onchange: async (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      const text = await file.text();
-      editor.value = text;
-      await runImport(text, file.name);
+      await runImport(file, file.name);
       (e.target as HTMLInputElement).value = "";
     },
   }) as HTMLInputElement;
   const importBtn = Button({ label: "Import .sql", icon: "file-import", onClick: () => fileInput.click() });
 
-  async function runImport(sql: string, filename: string) {
+  async function runImport(body: string | Blob, filename: string) {
     if (running) return;
     running = true;
     clear(resultArea);
     resultArea.appendChild(el("div.gtma-sql__running", icon("spinner", { spin: true }), el("span.muted", {}, `Importing ${filename}…`)));
     try {
-      const result = await api.importSQL(opts.database ?? "", sql);
+      const result = await api.importSQL(opts.database ?? "", body);
       showImport(result, filename);
       refreshTree();
     } catch (err) {

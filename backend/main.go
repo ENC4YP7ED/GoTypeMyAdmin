@@ -34,6 +34,8 @@ func main() {
 	sessionTTL := flag.Duration("session-ttl", 2*time.Hour, "idle lifetime of a database session")
 	allowHostsRaw := flag.String("allow-hosts", envOr("GTMA_ALLOW_HOSTS", ""),
 		"comma-separated allowlist of database hosts clients may connect to (empty = any)")
+	tlsCert := flag.String("tls-cert", envOr("GTMA_TLS_CERT", ""), "TLS certificate file (enables HTTPS)")
+	tlsKey := flag.String("tls-key", envOr("GTMA_TLS_KEY", ""), "TLS private key file (enables HTTPS)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -64,9 +66,20 @@ func main() {
 	}
 	srv := server.New(srvCfg)
 
+	useTLS := *tlsCert != "" && *tlsKey != ""
 	go func() {
-		log.Printf("GoTypeMyAdmin %s listening on %s (frontend: %s)", version, *addr, staticSource)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		scheme := "http"
+		if useTLS {
+			scheme = "https"
+		}
+		log.Printf("GoTypeMyAdmin %s listening on %s%s (frontend: %s)", version, scheme+"://", *addr, staticSource)
+		var err error
+		if useTLS {
+			err = srv.ListenAndServeTLS(*tlsCert, *tlsKey)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server error: %v", err)
 		}
 	}()

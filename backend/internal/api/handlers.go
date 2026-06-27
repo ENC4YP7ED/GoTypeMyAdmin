@@ -42,7 +42,10 @@ func bearer(r *http.Request) string {
 	if strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
-	return ""
+	// Fall back to a ?token= query param so the browser can stream downloads
+	// (export links) directly to disk, where it can't set an Authorization
+	// header. The token isn't an ambient credential, so this doesn't open CSRF.
+	return r.URL.Query().Get("token")
 }
 
 // ---- connection ------------------------------------------------------------
@@ -55,6 +58,10 @@ type connectReq struct {
 }
 
 func (a *API) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if !a.connLimiter.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "too many connection attempts; slow down")
+		return
+	}
 	var req connectReq
 	if err := decode(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request body")

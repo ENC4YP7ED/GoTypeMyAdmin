@@ -1,8 +1,10 @@
 package db
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
+	"io"
 	"strings"
 	"time"
 )
@@ -120,4 +122,139 @@ func RunScript(ctx context.Context, db *sql.DB, schema, script string) (*ImportR
 	}
 	res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
 	return res, nil
+}
+
+// RunScriptStream executes a SQL script read from r, splitting it into
+// statements on the fly so an arbitrarily large dump is never buffered whole —
+// only the current statement is held in memory. Same comment/quote handling as
+// SplitStatements; stops at the first error.
+func RunScriptStream(ctx context.Context, db *sql.DB, schema string, r io.Reader) (*ImportResult, error) {
+	res := &ImportResult{}
+	start := time.Now()
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	if schema != "" {
+		if _, err := conn.ExecContext(ctx, "USE "+QuoteIdent(schema)); err != nil {
+			return nil, err
+		}
+	}
+
+	exec := func(cur *strings.Builder) (stop bool) {
+		stmt := strings.TrimSpace(cur.String())
+		cur.Reset()
+		if stmt == "" {
+			return false
+		}
+		res.Statements++
+		out, err := conn.ExecContext(ctx, stmt)
+		if err != nil {
+			res.FailedAt = res.Statements
+			res.Error = err.Error()
+			return true
+		}
+		if n, e := out.RowsAffected(); e == nil {
+			res.Affected += n
+		}
+		res.Executed++
+		return false
+	}
+
+	br := bufio.NewReaderSize(r, 64*1024)
+	var cur strings.Builder
+	readErr := error(nil)
+
+loop:
+	for {
+		c, _, err := br.ReadRune()
+		if err != nil {
+			if err != io.EOF {
+				readErr = err
+			}
+			break
+		}
+		switch c {
+		case '\'', '"', '`':
+			cur.WriteRune(c)
+			for {
+				n, _, e := br.ReadRune()
+				if e != nil {
+					break
+				}
+				cur.WriteRune(n)
+				if n == '\\' && c != '`' {
+					if n2, _, e2 := br.ReadRune(); e2 == nil {
+						cur.WriteRune(n2)
+					}
+					continue
+				}
+				if n == c {
+					break
+				}
+			}
+		case '-':
+			if n, _, e := br.ReadRune(); e == nil && n == '-' {
+				skipLine(br)
+				cur.WriteRune('\n')
+			} else {
+				if e == nil {
+					_ = br.UnreadRune()
+				}
+				cur.WriteRune(c)
+			}
+		case '#':
+			skipLine(br)
+			cur.WriteRune('\n')
+		case '/':
+			if n, _, e := br.ReadRune(); e == nil && n == '*' {
+				skipBlockComment(br)
+			} else {
+				if e == nil {
+					_ = br.UnreadRune()
+				}
+				cur.WriteRune(c)
+			}
+		case ';':
+			if exec(&cur) {
+				break loop
+			}
+		default:
+			cur.WriteRune(c)
+		}
+	}
+
+	if readErr != nil {
+		return nil, readErr
+	}
+	if res.Error == "" {
+		exec(&cur) // trailing statement without a semicolon
+	}
+	res.DurationMS = float64(time.Since(start).Microseconds()) / 1000.0
+	return res, nil
+}
+
+func skipLine(br *bufio.Reader) {
+	for {
+		c, _, err := br.ReadRune()
+		if err != nil || c == '\n' {
+			return
+		}
+	}
+}
+
+func skipBlockComment(br *bufio.Reader) {
+	prevStar := false
+	for {
+		c, _, err := br.ReadRune()
+		if err != nil {
+			return
+		}
+		if prevStar && c == '/' {
+			return
+		}
+		prevStar = c == '*'
+	}
 }

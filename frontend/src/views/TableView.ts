@@ -8,7 +8,7 @@ import { LoadingState, EmptyState, Field, Segmented } from "../components/misc.t
 import { confirmModal } from "../components/Modal.ts";
 import { SqlConsole } from "./SqlConsole.ts";
 import { openRowEditor, rowIdentity } from "./RowEditor.ts";
-import { download } from "../util/download.ts";
+import { downloadUrl } from "../util/download.ts";
 import { notify } from "../components/Toast.ts";
 import { tooltip } from "../components/Tooltip.ts";
 import { api } from "../api/client.ts";
@@ -309,12 +309,6 @@ function StructureTab(database: string, table: string): HTMLElement {
 
 // ---- Export ----------------------------------------------------------------
 
-const MIME: Record<ExportFormat, string> = {
-  sql: "application/sql",
-  csv: "text/csv",
-  json: "application/json",
-};
-
 function ExportTab(database: string, table: string): HTMLElement {
   const root = el("div.gtma-export.grow");
   let format: ExportFormat = "sql";
@@ -352,7 +346,7 @@ function ExportTab(database: string, table: string): HTMLElement {
       }),
       Button({ label: "Copy", icon: "copy", size: "sm", onClick: copy }),
       Button({ label: "Download", icon: "download", size: "sm", variant: "primary",
-        onClick: () => { download(`${database}.${table}.${format}`, current, MIME[format]); notify.success("Download started"); } }),
+        onClick: () => { downloadUrl(api.exportTableHref(database, table, format), `${database}.${table}.${format}`); notify.success("Download started"); } }),
     ),
     preview,
   );

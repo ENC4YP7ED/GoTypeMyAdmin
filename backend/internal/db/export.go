@@ -1,12 +1,13 @@
 package db
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -20,38 +21,81 @@ const (
 	FormatJSON ExportFormat = "json"
 )
 
-// ExportTable serializes a whole table in the requested format. For SQL it
-// emits the CREATE statement followed by INSERTs.
-func ExportTable(ctx context.Context, db *sql.DB, schema, table string, format ExportFormat) (string, string, error) {
-	rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(table), 0)
-	if err != nil {
-		return "", "", err
-	}
+// sqlInsertBatch controls how many rows go into one INSERT statement when
+// streaming a SQL dump, so re-imports stay under max_allowed_packet.
+const sqlInsertBatch = 200
 
+// MimeFor maps an export format to its content type.
+func MimeFor(format ExportFormat) string {
 	switch format {
 	case FormatCSV:
-		return exportCSV(rs), "text/csv", nil
+		return "text/csv"
 	case FormatJSON:
-		return exportJSON(rs), "application/json", nil
+		return "application/json"
 	default:
-		ddl, err := CreateTableSQL(ctx, db, schema, table)
-		if err != nil {
-			return "", "", err
-		}
-		return exportSQL(schema, table, ddl, rs), "application/sql", nil
+		return "application/sql"
 	}
 }
 
-// ExportDatabase produces a SQL dump of every base table in a schema.
-func ExportDatabase(ctx context.Context, db *sql.DB, schema string) (string, error) {
+// ExportSource is an opened, ready-to-stream table export. Opening it runs the
+// initial query (and DDL for SQL), so errors surface *before* the caller writes
+// any response headers; WriteTo then streams the body row-by-row.
+type ExportSource struct {
+	rows   *sql.Rows
+	format ExportFormat
+	table  string
+	ddl    string
+}
+
+// OpenExportTable prepares a streaming export of one table.
+func OpenExportTable(ctx context.Context, db *sql.DB, schema, table string, format ExportFormat) (*ExportSource, error) {
+	var ddl string
+	if format == FormatSQL {
+		var err error
+		if ddl, err = CreateTableSQL(ctx, db, schema, table); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := db.QueryContext(ctx, "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(table))
+	if err != nil {
+		return nil, err
+	}
+	return &ExportSource{rows: rows, format: format, table: table, ddl: ddl}, nil
+}
+
+// Close releases the underlying rows.
+func (s *ExportSource) Close() {
+	if s.rows != nil {
+		_ = s.rows.Close()
+	}
+}
+
+// Stream writes the export body to w without buffering the whole table.
+func (s *ExportSource) Stream(w io.Writer) error {
+	bw := bufio.NewWriterSize(w, 64*1024)
+	defer bw.Flush()
+	switch s.format {
+	case FormatCSV:
+		return streamCSV(bw, s.rows)
+	case FormatJSON:
+		return streamJSON(bw, s.rows)
+	default:
+		return streamSQLTable(bw, s.table, s.ddl, s.rows)
+	}
+}
+
+// ExportDatabaseTo streams a SQL dump of every base table in a schema to w.
+func ExportDatabaseTo(ctx context.Context, db *sql.DB, schema string, w io.Writer) error {
 	tables, err := Tables(ctx, db, schema)
 	if err != nil {
-		return "", err
+		return err
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "-- GoTypeMyAdmin dump\n-- Database: %s\n-- Generated: %s\n\n",
+	bw := bufio.NewWriterSize(w, 64*1024)
+	defer bw.Flush()
+
+	fmt.Fprintf(bw, "-- GoTypeMyAdmin dump\n-- Database: %s\n-- Generated: %s\n\n",
 		schema, time.Now().UTC().Format(time.RFC3339))
-	fmt.Fprintf(&b, "CREATE DATABASE IF NOT EXISTS %s;\nUSE %s;\n\n", QuoteIdent(schema), QuoteIdent(schema))
+	fmt.Fprintf(bw, "CREATE DATABASE IF NOT EXISTS %s;\nUSE %s;\n\n", QuoteIdent(schema), QuoteIdent(schema))
 
 	for _, t := range tables {
 		if t.Type == "VIEW" {
@@ -59,86 +103,160 @@ func ExportDatabase(ctx context.Context, db *sql.DB, schema string) (string, err
 		}
 		ddl, err := CreateTableSQL(ctx, db, schema, t.Name)
 		if err != nil {
-			return "", err
+			return err
 		}
-		rs, err := Exec(ctx, db, "", "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(t.Name), 0)
+		rows, err := db.QueryContext(ctx, "SELECT * FROM "+QuoteIdent(schema)+"."+QuoteIdent(t.Name))
 		if err != nil {
-			return "", err
+			return err
 		}
-		b.WriteString(exportSQL(schema, t.Name, ddl, rs))
-		b.WriteString("\n")
+		if err := streamSQLTable(bw, t.Name, ddl, rows); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		_ = rows.Close()
+		bw.WriteString("\n")
 	}
-	return b.String(), nil
+	return nil
 }
 
-func exportSQL(schema, table, ddl string, rs *ResultSet) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "-- Table: %s\n", table)
-	fmt.Fprintf(&b, "DROP TABLE IF EXISTS %s;\n", QuoteIdent(table))
-	b.WriteString(ddl)
-	b.WriteString(";\n\n")
+// ---- per-format streamers --------------------------------------------------
 
-	if len(rs.Rows) == 0 {
-		return b.String()
+func streamCSV(w io.Writer, rows *sql.Rows) error {
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
 	}
-
-	cols := make([]string, len(rs.Columns))
-	for i, c := range rs.Columns {
-		cols[i] = QuoteIdent(c)
+	cw := csv.NewWriter(w)
+	if err := cw.Write(cols); err != nil {
+		return err
 	}
-	fmt.Fprintf(&b, "INSERT INTO %s (%s) VALUES\n", QuoteIdent(table), strings.Join(cols, ", "))
-	for i, row := range rs.Rows {
-		b.WriteString("  (")
-		for j, cell := range row {
-			if j > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(sqlLiteral(cell))
-		}
-		if i == len(rs.Rows)-1 {
-			b.WriteString(");\n")
-		} else {
-			b.WriteString("),\n")
-		}
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
-func exportCSV(rs *ResultSet) string {
-	var buf bytes.Buffer
-	w := csv.NewWriter(&buf)
-	_ = w.Write(rs.Columns)
-	for _, row := range rs.Rows {
-		rec := make([]string, len(row))
-		for i, cell := range row {
-			if cell == nil {
+	rec := make([]string, len(cols))
+	err = scanEach(rows, func(row []*string) error {
+		for i, c := range row {
+			if c == nil {
 				rec[i] = ""
 			} else {
-				rec[i] = *cell
+				rec[i] = *c
 			}
 		}
-		_ = w.Write(rec)
+		return cw.Write(rec)
+	})
+	cw.Flush()
+	if err == nil {
+		err = cw.Error()
 	}
-	w.Flush()
-	return buf.String()
+	return err
 }
 
-func exportJSON(rs *ResultSet) string {
-	out := make([]map[string]any, 0, len(rs.Rows))
-	for _, row := range rs.Rows {
-		obj := make(map[string]any, len(rs.Columns))
-		for i, col := range rs.Columns {
+func streamJSON(w io.Writer, rows *sql.Rows) error {
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "[\n"); err != nil {
+		return err
+	}
+	first := true
+	obj := make(map[string]any, len(cols))
+	err = scanEach(rows, func(row []*string) error {
+		if !first {
+			if _, err := io.WriteString(w, ",\n"); err != nil {
+				return err
+			}
+		}
+		first = false
+		for i, col := range cols {
 			if row[i] == nil {
 				obj[col] = nil
 			} else {
 				obj[col] = *row[i]
 			}
 		}
-		out = append(out, obj)
+		b, err := json.Marshal(obj)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(append([]byte("  "), b...))
+		return err
+	})
+	if err != nil {
+		return err
 	}
-	b, _ := json.MarshalIndent(out, "", "  ")
-	return string(b)
+	_, err = io.WriteString(w, "\n]\n")
+	return err
+}
+
+func streamSQLTable(w io.Writer, table, ddl string, rows *sql.Rows) error {
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "-- Table: %s\nDROP TABLE IF EXISTS %s;\n", table, QuoteIdent(table))
+	io.WriteString(w, ddl)
+	io.WriteString(w, ";\n\n")
+
+	quoted := make([]string, len(cols))
+	for i, c := range cols {
+		quoted[i] = QuoteIdent(c)
+	}
+	colList := strings.Join(quoted, ", ")
+
+	n := 0
+	err = scanEach(rows, func(row []*string) error {
+		if n%sqlInsertBatch == 0 {
+			if n > 0 {
+				io.WriteString(w, ";\n")
+			}
+			fmt.Fprintf(w, "INSERT INTO %s (%s) VALUES\n  (", QuoteIdent(table), colList)
+		} else {
+			io.WriteString(w, ",\n  (")
+		}
+		for j, cell := range row {
+			if j > 0 {
+				io.WriteString(w, ", ")
+			}
+			io.WriteString(w, sqlLiteral(cell))
+		}
+		io.WriteString(w, ")")
+		n++
+		return nil
+	})
+	if n > 0 {
+		io.WriteString(w, ";\n")
+	}
+	return err
+}
+
+// scanEach reads rows one at a time into reusable buffers and hands each row to
+// fn — no full-table buffering.
+func scanEach(rows *sql.Rows, fn func(row []*string) error) error {
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	raw := make([]sql.RawBytes, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range raw {
+		ptrs[i] = &raw[i]
+	}
+	row := make([]*string, len(cols))
+	for rows.Next() {
+		if err := rows.Scan(ptrs...); err != nil {
+			return err
+		}
+		for i, b := range raw {
+			if b == nil {
+				row[i] = nil
+			} else {
+				s := string(b)
+				row[i] = &s
+			}
+		}
+		if err := fn(row); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // sqlLiteral renders a cell as a SQL literal (NULL or single-quoted, escaped).

@@ -7,7 +7,7 @@ import { notify } from "../components/Toast.ts";
 import { api } from "../api/client.ts";
 import { navigate, refreshTree } from "../state/store.ts";
 import { formatBytes, formatNumber } from "../util/format.ts";
-import { download } from "../util/download.ts";
+import { downloadUrl } from "../util/download.ts";
 
 /** Lists the tables in one database. */
 export function DatabaseView(database: string): HTMLElement {
@@ -77,15 +77,9 @@ export function DatabaseView(database: string): HTMLElement {
     );
   }
 
-  async function exportDatabase() {
-    try {
-      notify.info("Generating dump…");
-      const sql = await api.exportDatabase(database);
-      download(`${database}.sql`, sql, "application/sql");
-      notify.success("Download started");
-    } catch (err) {
-      notify.error(String(err));
-    }
+  function exportDatabase() {
+    downloadUrl(api.exportDatabaseHref(database), `${database}.sql`);
+    notify.success("Download started");
   }
 
   async function dropTable(name: string) {

@@ -4,6 +4,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"gotypemyadmin/internal/session"
 )
@@ -25,9 +26,10 @@ type Config struct {
 
 // API holds shared dependencies for the handlers.
 type API struct {
-	sessions   *session.Store
-	mux        *http.ServeMux
-	allowHosts map[string]bool
+	sessions    *session.Store
+	mux         *http.ServeMux
+	allowHosts  map[string]bool
+	connLimiter *rateLimiter
 }
 
 // New builds the API handler with all routes registered.
@@ -36,13 +38,22 @@ func New(sessions *session.Store, cfg Config) *API {
 	for _, h := range cfg.AllowHosts {
 		allow[h] = true
 	}
-	a := &API{sessions: sessions, mux: http.NewServeMux(), allowHosts: allow}
+	a := &API{
+		sessions:    sessions,
+		mux:         http.NewServeMux(),
+		allowHosts:  allow,
+		connLimiter: newRateLimiter(12, time.Minute), // 12 connect attempts / IP / min
+	}
 	a.routes()
 	return a
 }
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	// Cap request bodies to bound memory — except /import, which is streamed
+	// statement-by-statement and may be an arbitrarily large dump.
+	if r.URL.Path != "/import" {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	}
 	a.mux.ServeHTTP(w, r)
 }
 

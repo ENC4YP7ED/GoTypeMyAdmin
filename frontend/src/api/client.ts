@@ -161,17 +161,38 @@ class ApiClient {
   }
 
   // ---- export / import ----
+  /** Fetch export text (used for the preview pane). */
   exportTable(db: string, table: string, format: ExportFormat): Promise<string> {
     return this.requestText(`${this.tablePath(db, table)}/export?format=${format}`);
   }
 
-  exportDatabase(db: string): Promise<string> {
-    return this.requestText(`/databases/${encodeURIComponent(db)}/export`);
+  /** Authenticated URL the browser can download directly (streamed to disk). */
+  exportTableHref(db: string, table: string, format: ExportFormat): string {
+    const q = new URLSearchParams({ format });
+    if (this.token) q.set("token", this.token);
+    return `/api${this.tablePath(db, table)}/export?${q}`;
   }
 
-  async importSQL(database: string, sql: string): Promise<ImportResult> {
-    const r = await this.request<{ result: ImportResult }>("POST", "/import", { database, sql });
-    return r.result;
+  exportDatabaseHref(db: string): string {
+    const q = new URLSearchParams();
+    if (this.token) q.set("token", this.token);
+    return `/api/databases/${encodeURIComponent(db)}/export?${q}`;
+  }
+
+  /** Stream a SQL script (string or a File/Blob) to the import endpoint without
+   *  buffering it as JSON; the body is uploaded directly. */
+  async importSQL(database: string, body: string | Blob): Promise<ImportResult> {
+    const headers: Record<string, string> = { "Content-Type": "application/sql" };
+    if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+    const res = await fetch(`/api/import?database=${encodeURIComponent(database)}`, { method: "POST", headers, body });
+    const text = await res.text();
+    let payload: unknown = null;
+    try { payload = JSON.parse(text); } catch { payload = { error: text }; }
+    if (!res.ok) {
+      if (res.status === 401) this.setToken(null);
+      throw new ApiError((payload as { error?: string })?.error ?? `Request failed (${res.status})`, res.status);
+    }
+    return (payload as { result: ImportResult }).result;
   }
 
   // ---- users ----
