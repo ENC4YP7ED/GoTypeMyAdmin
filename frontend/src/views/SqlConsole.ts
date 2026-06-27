@@ -129,6 +129,7 @@ export function SqlConsole(opts: SqlConsoleOptions = {}): HTMLElement {
       const grid = DataGrid({
         columns: rs.columns.map((name, i) => ({ name, type: rs.columnTypes[i] })),
         rows: rs.rows,
+        virtual: true,
       });
       resultArea.append(meta, el("div.gtma-sql__gridwrap", {}, grid.el));
     } else {

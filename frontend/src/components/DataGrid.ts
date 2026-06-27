@@ -19,6 +19,8 @@ export interface DataGridOptions {
   rowNumberStart?: number;
   onSort?: (column: string) => void;
   rowMenu?: (rowIndex: number, row: Array<string | null>) => MenuItem[];
+  /** Row-virtualize large result sets (only the visible window is in the DOM). */
+  virtual?: boolean;
 }
 
 export interface DataGridHandle {
@@ -27,16 +29,23 @@ export interface DataGridHandle {
 }
 
 const NUMERIC = /^(INT|BIGINT|SMALLINT|TINYINT|MEDIUMINT|DECIMAL|FLOAT|DOUBLE|YEAR|BIT)/i;
+const VIRTUAL_MIN = 200; // below this, just render everything
+const OVERSCAN = 10;
 
-/** Spreadsheet-style result grid: sticky header, NULL styling, cell copy. */
+/** Spreadsheet-style result grid: sticky header, NULL styling, cell copy,
+ *  optional row virtualization for huge result sets. */
 export function DataGrid(opts: DataGridOptions): DataGridHandle {
   const table = el("table.gtma-grid");
   const root = el("div.gtma-grid__scroll", {}, table) as HTMLDivElement;
 
+  // A single scroll handler delegates to whatever the current render installed
+  // (the virtual window redraw, or nothing for fully-rendered grids).
+  let onScroll: (() => void) | null = null;
+  root.addEventListener("scroll", () => onScroll?.(), { passive: true });
+
   // Let the vertical wheel pan the table horizontally when it overflows
-  // sideways — natural for wide result sets. Vertical scrolling still wins
-  // while there's room to scroll up/down; at the vertical edges (or when the
-  // table fits vertically) the wheel moves left/right instead.
+  // sideways. Vertical scrolling wins while there's room; at the vertical edges
+  // (or when the table fits vertically) the wheel moves left/right instead.
   root.addEventListener("wheel", (e: WheelEvent) => {
     const canX = root.scrollWidth - root.clientWidth > 1;
     if (!canX || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
@@ -51,10 +60,79 @@ export function DataGrid(opts: DataGridOptions): DataGridHandle {
   }, { passive: false });
 
   function render(columns: GridColumn[], rows: Array<Array<string | null>>, sortBy?: string, sortDir?: string) {
+    onScroll = null;
+    root.scrollTop = 0;
+    table.style.tableLayout = "";
     clear(table);
+    table.appendChild(buildHeader(columns, sortBy, sortDir));
 
-    // Header.
-    const headRow = el("tr", {},
+    if (!rows.length) {
+      table.appendChild(el("tbody", {}, el("tr", {},
+        el("td.gtma-grid__empty", { attrs: { colspan: columns.length + 1 } }, "No rows"))));
+      return;
+    }
+    if (opts.virtual && rows.length > VIRTUAL_MIN) {
+      renderVirtual(columns, rows);
+    } else {
+      const tbody = el("tbody");
+      rows.forEach((row, ri) => tbody.appendChild(buildBodyRow(ri, row, columns)));
+      table.appendChild(tbody);
+    }
+  }
+
+  // ---- virtual path ----
+  function renderVirtual(columns: GridColumn[], rows: Array<Array<string | null>>) {
+    const tbody = el("tbody");
+    table.appendChild(tbody);
+    let rowH = 37;
+    let calibrated = false;
+
+    const draw = () => {
+      const vh = root.clientHeight || 480;
+      const start = Math.max(0, Math.floor(root.scrollTop / rowH) - OVERSCAN);
+      const end = Math.min(rows.length, start + Math.ceil(vh / rowH) + OVERSCAN * 2);
+      clear(tbody);
+      tbody.appendChild(spacerRow(start * rowH, columns.length + 1));
+      for (let i = start; i < end; i++) tbody.appendChild(buildBodyRow(i, rows[i], columns));
+      tbody.appendChild(spacerRow((rows.length - end) * rowH, columns.length + 1));
+
+      if (!calibrated) {
+        calibrated = true;
+        requestAnimationFrame(() => {
+          const r = tbody.querySelector("tr.gtma-grid__row") as HTMLElement | null;
+          if (r) {
+            const h = r.getBoundingClientRect().height;
+            if (h > 8) rowH = h;
+          }
+          lockColumnWidths();
+          draw(); // redraw with the calibrated row height
+        });
+      }
+    };
+
+    onScroll = rafThrottle(draw);
+    draw();
+  }
+
+  // Measure header widths and freeze them via a <colgroup> + fixed layout, so
+  // columns don't jitter as rows scroll in and out of the window.
+  function lockColumnWidths() {
+    const ths = [...table.querySelectorAll("thead th")] as HTMLElement[];
+    if (!ths.length) return;
+    table.querySelector("colgroup")?.remove();
+    const cg = document.createElement("colgroup");
+    for (const th of ths) {
+      const col = document.createElement("col");
+      col.style.width = `${Math.round(th.getBoundingClientRect().width)}px`;
+      cg.appendChild(col);
+    }
+    table.insertBefore(cg, table.firstChild);
+    table.style.tableLayout = "fixed";
+  }
+
+  // ---- shared builders ----
+  function buildHeader(columns: GridColumn[], sortBy?: string, sortDir?: string): HTMLElement {
+    return el("thead", {}, el("tr", {},
       el("th.gtma-grid__rownum", {}, "#"),
       ...columns.map((c) => {
         const sortable = !!opts.onSort;
@@ -71,26 +149,16 @@ export function DataGrid(opts: DataGridOptions): DataGridHandle {
           ),
         );
       }),
+    ));
+  }
+
+  function buildBodyRow(ri: number, row: Array<string | null>, columns: GridColumn[]): HTMLElement {
+    const tr = el("tr.gtma-grid__row", {},
+      el("td.gtma-grid__rownum", {}, String((opts.rowNumberStart ?? 1) + ri)),
+      ...row.map((cell, ci) => renderCell(cell, columns[ci])),
     );
-    table.appendChild(el("thead", {}, headRow));
-
-    // Body.
-    const tbody = el("tbody");
-    const start = opts.rowNumberStart ?? 1;
-    rows.forEach((row, ri) => {
-      const tr = el("tr.gtma-grid__row", {},
-        el("td.gtma-grid__rownum", {}, String(start + ri)),
-        ...row.map((cell, ci) => renderCell(cell, columns[ci])),
-      );
-      if (opts.rowMenu) attachContextMenu(tr, () => opts.rowMenu!(ri, row));
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-
-    if (!rows.length) {
-      table.appendChild(el("tbody", {}, el("tr", {},
-        el("td.gtma-grid__empty", { attrs: { colspan: columns.length + 1 } }, "No rows"))));
-    }
+    if (opts.rowMenu) attachContextMenu(tr, () => opts.rowMenu!(ri, row));
+    return tr;
   }
 
   function renderCell(cell: string | null, col: GridColumn): HTMLElement {
@@ -127,6 +195,20 @@ export function DataGrid(opts: DataGridOptions): DataGridHandle {
   return {
     el: root,
     setData: (columns, rows) => render(columns, rows, opts.sortBy, opts.sortDir),
+  };
+}
+
+function spacerRow(px: number, cols: number): HTMLElement {
+  return el("tr.gtma-grid__spacer", { attrs: { "aria-hidden": "true" } },
+    el("td", { attrs: { colspan: cols }, style: { height: `${px}px`, padding: "0", border: "0" } }));
+}
+
+function rafThrottle(fn: () => void): () => void {
+  let queued = false;
+  return () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; fn(); });
   };
 }
 

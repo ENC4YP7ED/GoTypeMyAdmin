@@ -243,7 +243,7 @@ How each class is handled here:
 | **SQL injection** (PMASA-2020-x: username/search/user-accounts) | Identifiers go through backtick-quoting (`QuoteIdent`); row reads/writes use bound `?` parameters; `ORDER BY` direction is whitelisted. The `GRANT` builder — which cannot bind parameters — validates privileges against an allowlist and canonicalizes the scope. |
 | **CSRF** (CVE-2019-12616) | Auth is a `Bearer` token in the `Authorization` header (not an ambient cookie), so cross-site requests can't carry it. |
 | **SSRF / arbitrary-server proxy** (PMASA-2017-6; cf. `AllowArbitraryServer`) | The connect host can be restricted with `-allow-hosts`; the server logs a warning when it's unset. |
-| **Resource exhaustion / DoS** | Exports and imports are **streamed** (never buffered whole), so they're size-unbounded without blowing memory; JSON request bodies are capped at 64 MiB; browse is paginated. `/connect` is rate-limited (12/min/IP). |
+| **Resource exhaustion / DoS** | Exports and imports are **streamed** (never buffered whole), so they're size-unbounded without blowing memory; the result grid is **row-virtualized** (only the visible window is in the DOM); JSON request bodies are capped at 64 MiB; browse is paginated. `/connect` is rate-limited (12/min/IP). |
 | **Path traversal / LFI** | Static files served via `http.Dir` + cleaned paths; no user-controlled file reads. |
 | **RCE via `preg_replace /e`, file include, deserialization** | Not applicable — no `eval`, no dynamic includes, no PHP. |
 | **Clickjacking / MIME sniffing** | `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
